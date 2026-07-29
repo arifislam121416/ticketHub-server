@@ -266,9 +266,6 @@ app.patch("/tickets/:id/book", async (req, res) => {
   }
 }
 
-run().catch(console.dir);
+run().catch(console.error);
 
-// app.listen(port, () => {
-//   console.log(`Server Running On ${port}`);
-// });
 module.exports = app;
