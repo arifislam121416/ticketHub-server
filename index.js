@@ -22,36 +22,38 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 
 async function run() {
   try {
+     await client.connect();
+    console.log("✅ MongoDB Connected");
     const db = client.db("TicketHub");
 
 const ticketCollection = db.collection("tickets");
 const subscriptionCollection = db.collection("subscriptions");
-const userCollection = db.collection("users");
+const userCollection = db.collection("user");
 const bookingCollection = db.collection("bookings");
 
     // Get Tickets
-   app.post("/subscription", async (req, res) => {
-  try {
+app.post("/subscription", async (req, res) => {
+  
     const { user, session_id } = req.body;
-
-    const subscription = {
-      user,
+    const sub_result = await subscriptionCollection.insertOne({
+      userId: new ObjectId(user.id),
       session_id,
-      createdAt: new Date(),
-    };
-
-    const result =
-      await subscriptionCollection.insertOne(subscription);
-
-    res.send(result);
-
-  } catch (error) {
-    res.status(500).send({
-      message: error.message,
     });
-  }
-});
 
+    const user_result = await userCollection.updateOne(
+      { _id: new ObjectId(user.id) },
+      {
+        $set: {
+          plan: "Pro",
+        },
+      }
+    );
+    res.send({
+      user_result,
+      sub_result
+    });
+  
+});
 app.post("/bookings", async (req, res) => {
   try {
     const booking = {
@@ -64,6 +66,21 @@ app.post("/bookings", async (req, res) => {
 
     res.send(result);
 
+  } catch (error) {
+    res.status(500).send({
+      message: error.message,
+    });
+  }
+});
+
+app.get("/transactions/:email", async (req, res) => {
+  try {
+    const transactions = await subscriptionCollection
+      .find({ email: req.params.email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(transactions);
   } catch (error) {
     res.status(500).send({
       message: error.message,
