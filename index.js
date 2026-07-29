@@ -24,7 +24,7 @@ async function run() {
   try {
      await client.connect();
     console.log("✅ MongoDB Connected");
-    const db = client.db("TicketHub");
+    const db = client.db(process.env.DB_NAME);
 
 const ticketCollection = db.collection("tickets");
 const subscriptionCollection = db.collection("subscriptions");
@@ -268,6 +268,7 @@ app.patch("/tickets/:id/book", async (req, res) => {
 
 run().catch(console.dir);
 
-app.listen(port, () => {
-  console.log(`Server Running On ${port}`);
-});
+// app.listen(port, () => {
+//   console.log(`Server Running On ${port}`);
+// });
+module.exports = app;
