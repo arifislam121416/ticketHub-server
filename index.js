@@ -27,6 +27,7 @@ const ticketCollection = db.collection("tickets");
 const subscriptionCollection = db.collection("subscriptions");
 const userCollection = db.collection("user");
 const bookingCollection = db.collection("bookings");
+const bookingPaymentCollection = db.collection("bookingPayment");
 
 async function connectDB() {
   try {
@@ -130,6 +131,10 @@ app.put("/tickets/:id", async (req, res) => {
 app.post("/subscription", async (req, res) => {
   try {
     const { user, session_id } = req.body;
+     const isExisting = await subscriptionCollection.findOne({ userId: new ObjectId(user.id), ticketId: new ObjectId(ticketId) });
+    if (isExisting) {
+      return res.status(400).send({ message: "You have already booked this ticket." });
+    }
     const sub_result = await subscriptionCollection.insertOne({
       userId: new ObjectId(user.id),
       session_id,
@@ -137,11 +142,61 @@ app.post("/subscription", async (req, res) => {
 
     const user_result = await userCollection.updateOne(
       { _id: new ObjectId(user.id) },
-      { $set: { plan: "Pro" } }
+      { $set: { plan: "pro" } }
     );
     res.send({ user_result, sub_result });
   } catch (error) {
     res.status(500).send({ message: error.message });
+  }
+});
+
+//booking Payment
+app.post("/bookingPayment", async (req, res) => {
+  try {
+    const { ticketId, title, price, userId, session_id } = req.body;
+
+    // 1. Validate required fields
+    if (!userId || !ticketId) {
+      return res.status(400).send({ 
+        message: "Missing required fields: both userId and ticketId are required." 
+      });
+    }
+
+    // 2. Validate MongoDB ObjectIds to prevent crash on invalid strings or empty strings
+    if (!ObjectId.isValid(userId) || !ObjectId.isValid(ticketId)) {
+      return res.status(400).send({ 
+        message: "Invalid userId or ticketId format." 
+      });
+    }
+
+    const userObjectId = new ObjectId(userId);
+    const ticketObjectId = new ObjectId(ticketId);
+
+    // 3. Check for existing booking
+    const isExisting = await bookingPaymentCollection.findOne({ 
+      userId: userObjectId, 
+      ticketId: ticketObjectId 
+    });
+
+    if (isExisting) {
+      return res.status(400).send({ message: "You have already booked this ticket." });
+    }
+
+    // 4. Insert booking document
+    const sub_result = await bookingPaymentCollection.insertOne({
+      userId: userObjectId,
+      ticketId: ticketObjectId,
+      title,
+      price: Number(price),
+      session_id,
+      createdAt: new Date()
+    });
+
+    return res.status(200).send({ success: true, sub_result });
+
+  } catch (error) {
+    console.error("Booking Payment Error:", error);
+    return res.status(500).send({ message: error.message || "Internal Server Error" });
   }
 });
 
