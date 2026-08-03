@@ -155,14 +155,12 @@ app.post("/bookingPayment", async (req, res) => {
   try {
     const { ticketId, title, price, userId, session_id } = req.body;
 
-    // 1. Validate required fields
     if (!userId || !ticketId) {
       return res.status(400).send({ 
         message: "Missing required fields: both userId and ticketId are required." 
       });
     }
 
-    // 2. Validate MongoDB ObjectIds to prevent crash on invalid strings or empty strings
     if (!ObjectId.isValid(userId) || !ObjectId.isValid(ticketId)) {
       return res.status(400).send({ 
         message: "Invalid userId or ticketId format." 
@@ -172,7 +170,6 @@ app.post("/bookingPayment", async (req, res) => {
     const userObjectId = new ObjectId(userId);
     const ticketObjectId = new ObjectId(ticketId);
 
-    // 3. Check for existing booking
     const isExisting = await bookingPaymentCollection.findOne({ 
       userId: userObjectId, 
       ticketId: ticketObjectId 
@@ -182,7 +179,6 @@ app.post("/bookingPayment", async (req, res) => {
       return res.status(400).send({ message: "You have already booked this ticket." });
     }
 
-    // 4. Insert booking document
     const sub_result = await bookingPaymentCollection.insertOne({
       userId: userObjectId,
       ticketId: ticketObjectId,
@@ -208,6 +204,52 @@ app.post("/bookings", async (req, res) => {
     res.send(result);
   } catch (error) {
     res.status(500).send({ message: error.message });
+  }
+});
+
+app.get("/vendor/dashboard", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    const bookings = await bookingCollection
+      .find({ vendorEmail: email })
+      .toArray();
+
+    const totalRevenue = bookings
+      .filter((b) => b.status === "Approved")
+      .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+
+    const ticketsSold = bookings.reduce(
+      (sum, b) => sum + (b.quantity || 0),
+      0
+    );
+
+    const pendingBookings = bookings.filter(
+      (b) => b.status === "Pending"
+    ).length;
+
+    const recentBookings = bookings
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 5);
+
+      const tickets = await ticketCollection
+  .find({ vendorEmail: email })
+  .toArray();
+
+const activeTickets = tickets.length;
+    res.send({
+      stats: {
+        totalRevenue,
+        ticketsSold,
+        pendingBookings,
+        activeTickets,
+      },
+      recentBookings,
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: error.message,
+    });
   }
 });
 
