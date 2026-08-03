@@ -28,6 +28,7 @@ const subscriptionCollection = db.collection("subscriptions");
 const userCollection = db.collection("user");
 const bookingCollection = db.collection("bookings");
 const bookingPaymentCollection = db.collection("bookingPayment");
+const activityCollection = db.collection("activities");
 
 async function connectDB() {
   try {
@@ -47,12 +48,22 @@ app.get("/", (req, res) => {
 // Add Ticket
 app.post("/tickets", async (req, res) => {
   try {
+
     const result = await ticketCollection.insertOne(req.body);
+
+    await activityCollection.insertOne({
+      action: "New Ticket Added",
+      target: req.body.title,
+      actor: req.body.vendorEmail,
+      type: "ticket",
+      createdAt: new Date(),
+    });
 
     res.status(201).send({
       success: true,
       insertedId: result.insertedId,
     });
+
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -206,9 +217,23 @@ app.post("/bookingPayment", async (req, res) => {
 // Bookings
 app.post("/bookings", async (req, res) => {
   try {
-    const booking = { ...req.body, createdAt: new Date() };
+    const booking = {
+      ...req.body,
+      createdAt: new Date(),
+    };
+
     const result = await bookingCollection.insertOne(booking);
+
+    await activityCollection.insertOne({
+      action: "New Booking",
+      target: booking.title,
+      actor: booking.email,
+      type: "booking",
+      createdAt: new Date(),
+    });
+
     res.send(result);
+
   } catch (error) {
     res.status(500).send({ message: error.message });
   }
@@ -258,6 +283,140 @@ const activeTickets = tickets.length;
       message: error.message,
     });
   }
+});
+
+app.get("/admin/stats", async (req, res) => {
+
+    const totalUsers = await userCollection.countDocuments();
+
+    const totalTickets = await ticketCollection.countDocuments();
+
+    const pendingTickets = await ticketCollection.countDocuments({
+        verificationStatus: "pending",
+    });
+
+    const advertisedTickets = await ticketCollection.countDocuments({
+        advertised: true,
+    });
+
+    const bookings = await bookingCollection.find().toArray();
+
+   const revenue = bookings.reduce(
+    (sum, booking) => sum + Number(booking.totalPrice || 0),
+    0
+);
+
+    res.send({
+        totalUsers,
+        totalTickets,
+        pendingTickets,
+        advertisedTickets,
+        revenue,
+    });
+
+});
+
+app.get("/admin/activity", async (req, res) => {
+
+    const data = await activityCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
+
+    res.send(data);
+
+});
+
+app.get("/admin/chart", async (req, res) => {
+  try {
+
+    const bookings = await bookingCollection.find().toArray();
+
+    const months = [
+      "Jan","Feb","Mar","Apr",
+      "May","Jun","Jul","Aug",
+      "Sep","Oct","Nov","Dec"
+    ];
+
+    const result = months.map((month, index) => {
+
+      const total = bookings
+        .filter(item => {
+
+          const date = new Date(item.createdAt);
+
+          return date.getMonth() === index;
+
+        })
+        .reduce((sum,item)=>sum+Number(item.totalPrice||0),0);
+
+      return {
+
+        month,
+
+        sales: total
+
+      };
+
+    });
+
+    res.send(result);
+
+  } catch(err){
+
+    res.status(500).send({
+      message:err.message
+    })
+
+  }
+});
+
+app.get("/admin/pending-tickets", async(req,res)=>{
+
+const tickets=await ticketCollection.find({
+
+verificationStatus:"pending"
+
+}).toArray();
+
+res.send(tickets);
+
+});
+
+app.patch("/admin/tickets/:id/approve", async(req,res)=>{
+
+const result=await ticketCollection.updateOne(
+
+{_id:new ObjectId(req.params.id)},
+
+{$set:{verificationStatus:"approved"}}
+
+);
+
+res.send(result);
+
+});
+
+app.patch("/admin/tickets/:id/reject", async(req,res)=>{
+
+const result=await ticketCollection.updateOne(
+
+{_id:new ObjectId(req.params.id)},
+
+{$set:{verificationStatus:"rejected"}}
+
+);
+await activityCollection.insertOne({
+    action: "Ticket Approved",
+    target: ticket.title,
+    actor: "Admin",
+    type: "approve",
+    createdAt: new Date(),
+});
+
+res.send(result);
+
 });
 
 app.get("/transactions/:email", async (req, res) => {
