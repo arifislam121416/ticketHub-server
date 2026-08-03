@@ -48,9 +48,16 @@ app.get("/", (req, res) => {
 app.post("/tickets", async (req, res) => {
   try {
     const result = await ticketCollection.insertOne(req.body);
-    res.send(result);
+
+    res.status(201).send({
+      success: true,
+      insertedId: result.insertedId,
+    });
   } catch (error) {
-    res.status(500).send({ message: error.message });
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
   }
 });
 
