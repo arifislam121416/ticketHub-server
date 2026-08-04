@@ -145,10 +145,26 @@ app.put("/tickets/:id", async (req, res) => {
   }
 });
 
+app.patch("/tickets/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { verificationStatus } = req.body;
+
+  const result = await ticketCollection.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        verificationStatus,
+      },
+    }
+  );
+
+  res.send(result);
+});
+
 // Subscription
 app.post("/subscription", async (req, res) => {
   try {
-    const { user, session_id } = req.body;
+   const { user, ticketId, session_id } = req.body;
      const isExisting = await subscriptionCollection.findOne({ userId: new ObjectId(user.id), ticketId: new ObjectId(ticketId) });
     if (isExisting) {
       return res.status(400).send({ message: "You have already booked this ticket." });
@@ -292,6 +308,7 @@ app.get("/admin/profile/:email", async (req, res) => {
 
   console.log("Requested:", email);
   const admin = await userCollection.findOne({ email });
+    console.log("Result:", admin);
 
   if (!admin) {
     return res.status(404).send({
@@ -331,6 +348,51 @@ app.get("/admin/stats", async (req, res) => {
         revenue,
     });
 
+});
+
+app.get("/admin/statistics", async (req, res) => {
+  try {
+    const totalUsers = await userCollection.countDocuments();
+
+    const totalAdmins = await userCollection.countDocuments({
+      role: "Admin",
+    });
+
+    const totalVendors = await userCollection.countDocuments({
+      role: "Vendor",
+    });
+
+    const totalCustomers = await userCollection.countDocuments({
+      role: "User",
+    });
+
+    const fraudVendors = await userCollection.countDocuments({
+      isFraud: true,
+    });
+
+    const totalTickets = await ticketCollection.countDocuments();
+
+    const approvedTickets = await ticketCollection.countDocuments({
+      verificationStatus: "Approved",
+    });
+
+    const pendingTickets = await ticketCollection.countDocuments({
+      verificationStatus: "Pending",
+    });
+
+    res.send({
+      totalUsers,
+      totalAdmins,
+      totalVendors,
+      totalCustomers,
+      fraudVendors,
+      totalTickets,
+      approvedTickets,
+      pendingTickets,
+    });
+  } catch (err) {
+    res.status(500).send(err);
+  }
 });
 
 app.get("/admin/activity", async (req, res) => {
@@ -416,8 +478,11 @@ res.send(result);
 });
 
 app.patch("/admin/tickets/:id/reject", async(req,res)=>{
-
-const result=await ticketCollection.updateOne(
+  
+const ticket = await ticketCollection.findOne({
+    _id:new ObjectId(req.params.id)
+});
+const result = await ticketCollection.updateOne(
 
 {_id:new ObjectId(req.params.id)},
 
@@ -425,7 +490,7 @@ const result=await ticketCollection.updateOne(
 
 );
 await activityCollection.insertOne({
-    action: "Ticket Approved",
+    action: "Ticket Rejected",
     target: ticket.title,
     actor: "Admin",
     type: "approve",
@@ -484,6 +549,138 @@ app.delete("/tickets/:id", async (req, res) => {
     res.status(500).send({ message: error.message });
   }
 });
+
+app.get("/users", async (req, res) => {
+  try {
+    const users = await userCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(users);
+  } catch (err) {
+    res.status(500).send({
+      message: "Failed to fetch users",
+    });
+  }
+});
+
+app.patch("/users/:id/role", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!["Admin", "Vendor", "User"].includes(role)) {
+      return res.status(400).send({
+        message: "Invalid role",
+      });
+    }
+
+    const result = await userCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          role,
+        },
+      }
+    );
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({
+      message: "Failed to update role",
+    });
+  }
+});
+
+app.patch("/users/:id/fraud", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await userCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!user) {
+      return res.status(404).send({
+        message: "User not found",
+      });
+    }
+
+    await userCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          isFraud: true,
+        },
+      }
+    );
+
+    await ticketCollection.updateMany(
+      {
+        vendorEmail: user.email,
+      },
+      {
+        $set: {
+          verificationStatus: "Hidden",
+        },
+      }
+    );
+
+    res.send({
+      success: true,
+      message: "Vendor marked as fraud",
+    });
+  } catch (err) {
+    res.status(500).send({
+      message: "Failed to mark vendor as fraud",
+    });
+  }
+});
+
+app.patch("/users/:id/remove-fraud", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await userCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    await userCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          isFraud: false,
+        },
+      }
+    );
+
+    await ticketCollection.updateMany(
+      {
+        vendorEmail: user.email,
+      },
+      {
+        $set: {
+          verificationStatus: "Approved",
+        },
+      }
+    );
+
+    res.send({
+      success: true,
+    });
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+
 
 // Vercel Serverless Export
 module.exports = app;
