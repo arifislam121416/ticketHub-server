@@ -285,6 +285,22 @@ const activeTickets = tickets.length;
   }
 });
 
+
+// GET /admin/profile/:email
+app.get("/admin/profile/:email", async (req, res) => {
+  const { email } = req.params;
+
+  const admin = await userCollection.findOne({ email });
+
+  if (!admin) {
+    return res.status(404).send({
+      message: "Admin not found",
+    });
+  }
+
+  res.send(admin);
+});
+
 app.get("/admin/stats", async (req, res) => {
 
     const totalUsers = await userCollection.countDocuments();
