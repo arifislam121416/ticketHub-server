@@ -290,6 +290,7 @@ const activeTickets = tickets.length;
 app.get("/admin/profile/:email", async (req, res) => {
   const { email } = req.params;
 
+  console.log("Requested:", email);
   const admin = await userCollection.findOne({ email });
 
   if (!admin) {
